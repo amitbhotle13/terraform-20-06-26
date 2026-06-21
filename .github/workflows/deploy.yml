@@ -15,7 +15,6 @@ jobs:
 deploy:
 runs-on: ubuntu-latest
 
-```
 steps:
   - name: Set Environment Variables
     run: |
@@ -58,4 +57,3 @@ steps:
         --region us-central1 \
         --platform managed \
         --allow-unauthenticated
-```
