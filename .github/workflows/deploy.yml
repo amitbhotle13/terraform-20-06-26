@@ -1,59 +1,51 @@
-name: Deploy to Cloud Run
+name: Deploy Dev to Cloud Run
 
 on:
-push:
-branches:
-- dev
-- qa
-- prod
+  push:
+    branches:
+      - dev
 
 permissions:
-contents: read
-id-token: write
+  contents: read
+  id-token: write
 
 jobs:
-deploy:
-runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
 
-steps:
-  - name: Set Environment Variables
-    run: |
-      if [ "${GITHUB_REF_NAME}" = "dev" ]; then
-        echo "PROJECT_ID=dev-project-500104" >> $GITHUB_ENV
-        echo "SERVICE_NAME=demo-app-dev" >> $GITHUB_ENV
-      elif [ "${GITHUB_REF_NAME}" = "qa" ]; then
-        echo "PROJECT_ID=qa-project-500104" >> $GITHUB_ENV
-        echo "SERVICE_NAME=demo-app-qa" >> $GITHUB_ENV
-      elif [ "${GITHUB_REF_NAME}" = "prod" ]; then
-        echo "PROJECT_ID=prod-project-500104" >> $GITHUB_ENV
-        echo "SERVICE_NAME=demo-app-prod" >> $GITHUB_ENV
-      fi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - name: Checkout
-    uses: actions/checkout@v4
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
 
-  - name: Authenticate to GCP
-    uses: google-github-actions/auth@v2
-    with:
-      workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-      service_account: ${{ secrets.SERVICE_ACCOUNT }}
+      - name: Setup GCloud
+        uses: google-github-actions/setup-gcloud@v2
 
-  - name: Setup GCloud
-    uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Docker
+        run: |
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-  - name: Configure Docker
-    run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+      - name: Build Image
+        run: |
+          docker build \
+            -t us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/app-repo/demo-app-dev:${{ github.sha }} \
+            ./app
 
-  - name: Build Image
-    run: docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/app-repo/demo-app:${{ github.sha }} ./app
+      - name: Push Image
+        run: |
+          docker push \
+            us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/app-repo/demo-app-dev:${{ github.sha }}
 
-  - name: Push Image
-    run: docker push us-central1-docker.pkg.dev/$PROJECT_ID/app-repo/demo-app:${{ github.sha }}
-
-  - name: Deploy Cloud Run
-    run: |
-      gcloud run deploy $SERVICE_NAME \
-        --image us-central1-docker.pkg.dev/$PROJECT_ID/app-repo/demo-app:${{ github.sha }} \
-        --region us-central1 \
-        --platform managed \
-        --allow-unauthenticated
+      - name: Deploy Cloud Run Dev
+        run: |
+          gcloud run deploy demo-app-dev \
+            --image us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/app-repo/demo-app-dev:${{ github.sha }} \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated
